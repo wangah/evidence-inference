@@ -11,7 +11,7 @@ conda activate ~/local/evidence_inference_venv
 conda install pytorch -c pytorch
 pip install -r requirements.txt
 python -m spacy download en
-pip install https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.2.4/en_core_sci_sm-0.2.4.tar.gz
+pip install https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.4.0/en_core_sci_sm-0.4.0.tar.gz
 ```
 
 Experiments were run on a mix of 1080Tis, 2080Tis, Titan RTXs. The last is
