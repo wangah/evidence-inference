@@ -1,0 +1,60 @@
+{
+    "seed": 42,
+    "train_data": "annotations/splits/train_article_ids.txt",
+    "val_data": "annotations/splits/validation_article_ids.txt",
+    "test_data": "annotations/splits/test_article_ids.txt",
+    "bert_vocab": "allenai/scibert_scivocab_uncased",
+    "bert_dir": "allenai/scibert_scivocab_uncased",
+    "max_length": 512,
+    "evidence_identifier": {
+        "use_half_precision": 0,
+        "batch_size": 10,
+        "epochs": 10,
+        "patience": 10,
+        "max_grad_norm": 1.0,
+        "lr": 2e-5,
+        "sampling_ratio": 1.0
+    },
+    "evidence_classifier": {
+        "use_half_precision": 0,
+        "batch_size": 10,
+        "epochs": 10,
+        "patience": 10,
+        "max_grad_norm": 1.0,
+        "lr": 2e-5,
+        "classes": ["significantly decreased", "no significant difference", "significantly increased"]
+    },
+    "run_diagnostic_models": false,
+    "pretrain_on_scifact": true,
+    "scifact": {
+        "corpus": "data/scifact/corpus.jsonl",
+        "train_claims": "outputs/scifact/claims_train_pio_bert.jsonl",
+        "val_claims": "outputs/scifact/claims_dev_pio_bert.jsonl",
+        "test_claims": "outputs/scifact/claims_test_pio_bert.jsonl",
+        "rationale_identifier": {
+            "use_half_precision": 0,
+            "batch_size": 10,
+            "epochs": 10,
+            "patience": 10,
+            "max_grad_norm": 1.0,
+            "lr": 2e-5,
+            "sampling_ratio": 1.0
+        },
+        "rationale_classifier": {
+            "use_half_precision": 0,
+            "batch_size": 10,
+            "epochs": 10,
+            "patience": 10,
+            "max_grad_norm": 1.0,
+            "lr": 2e-5,
+            "classes": ["CONTRADICT", "NOT_ENOUGH_INFO", "SUPPORT"]
+        },
+        "neutral_class": "NOT_ENOUGH_INFO",
+        "evidence_class_to_rationale_class": {
+            "significantly decreased": "CONTRADICT",
+            "no significant difference": "NOT_ENOUGH_INFO",
+            "significantly increased": "SUPPORT"
+        }
+    }
+}
+
