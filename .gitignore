@@ -7,8 +7,12 @@ __pycache__/
 .idea
 /venv/
 # excluded because of size
+data/
 embeddings/
 *.log
 logs
 ..gitignore.un~
 .gitignore~
+.DS_Store
+.cenv
+.vscode/
