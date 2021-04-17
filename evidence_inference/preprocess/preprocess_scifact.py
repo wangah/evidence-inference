@@ -75,9 +75,12 @@ def extract_ico_prompt_from_predictions(claims):
     Returns the claims with new keys `i_tokens`, `c_tokens`, `o_tokens`.
     """
     for c in claims:
+        # Get pico spans
         tokens = c["tokens"]
         token_spans = condense_labels(c["pred_tags"])
 
+        # Extract the tokens for each interventions and outcomes span along with
+        # the span's total character length with stripped wordpiece ##'s
         interventions = []
         outcomes = []
         for (t_start, t_stop, label) in token_spans:
@@ -92,28 +95,29 @@ def extract_ico_prompt_from_predictions(claims):
             elif label == "o":
                 outcomes.append((length, span_tokens))
 
-            # Handle the predicted interventions spans
-            i_tokens = []
-            c_tokens = []
-            if len(interventions) == 1:
-                i_tokens = interventions[0][1]
-                c_tokens = ["placebo"]
-            elif len(interventions) == 2:
-                i_tokens = interventions[0][1]
-                c_tokens = interventions[1][1]
-            elif len(interventions) >= 3:
-                interventions.sort(key=lambda x: x[0], reverse=True)
-                i_tokens = interventions[0][1]
-                c_tokens = interventions[1][1]
+        # Choose the final span tokens to use for the intervention, comparator,
+        # and outcome
+        i_tokens = []
+        c_tokens = []
+        if len(interventions) == 1:
+            i_tokens = interventions[0][1]
+            c_tokens = ["placebo"]
+        elif len(interventions) == 2:
+            i_tokens = interventions[0][1]
+            c_tokens = interventions[1][1]
+        elif len(interventions) >= 3:
+            interventions.sort(key=lambda x: x[0], reverse=True)
+            i_tokens = interventions[0][1]
+            c_tokens = interventions[1][1]
 
-            # Handle the predicted outcomes spans
-            o_tokens = []
-            if len(outcomes) == 1:
-                o_tokens = outcomes[0][1]
-            elif len(outcomes) > 1:
-                outcomes.sort(key=lambda x: x[0], reverse=True)
-                o_tokens = outcomes[0][1]
+        o_tokens = []
+        if len(outcomes) == 1:
+            o_tokens = outcomes[0][1]
+        elif len(outcomes) > 1:
+            outcomes.sort(key=lambda x: x[0], reverse=True)
+            o_tokens = outcomes[0][1]
 
+        # write the tokens to the claims
         c["i_tokens"] = i_tokens
         c["c_tokens"] = c_tokens
         c["o_tokens"] = o_tokens
@@ -124,9 +128,9 @@ def extract_ico_prompt_from_predictions(claims):
 def drop_claims_with_malformed_prompts(claims):
     def is_prompt_complete(claim):
         return (
-            len(claim["i_tokens"]) == 1
-            and len(claim["c_tokens"]) == 1
-            and len(claim["o_tokens"]) == 1
+            len(claim["i_tokens"]) > 0
+            and len(claim["c_tokens"]) > 0
+            and len(claim["o_tokens"]) > 0
         )
 
     claims = [claim for claim in claims if is_prompt_complete(claim)]
@@ -185,6 +189,7 @@ def create_scifact_annotations(
             )
             annotations.append(s_ann)
 
+        # Create a SciFact Annotation for each evidence document
         else:
             for doc_id, doc_rationales in evidence.items():
                 abstract, encoded_abstract = get_abstract_and_encoding(doc_id)
@@ -208,4 +213,5 @@ def create_scifact_annotations(
                     o=outcome,
                     rationale_class=rationale_label,
                 )
+                annotations.append(s_ann)
     return annotations
