@@ -1710,34 +1710,38 @@ def load_scifact_data(
     will be preprocessed based on the completeness of the claim ICO element
     predictions.
     """
+    # TODO Create separate train/val/test splits from original train + val splits
+
     # Define the save path for the SciFact Dataset and extract if the preprocessed
     # data already exists.
     data_save_file = os.path.join(save_dir, "scifact_datasets.pkl")
     if os.path.exists(data_save_file):
-        logging.info(f"Resurrecting train/val/test from {data_save_file}")
-        train, val, test = torch.load(data_save_file)
-        return train, val, test
+        logging.info(f"Resurrecting train/val from {data_save_file}")
+        train, val = torch.load(data_save_file)
+        return train, val
 
     # Read jsonl files
     scifact_params = params["scifact"]
     corpus = load_jsonl(scifact_params["corpus"])
     train_claims = load_jsonl(scifact_params["train_claims"])
     val_claims = load_jsonl(scifact_params["val_claims"])
-    test_claims = load_jsonl(scifact_params["test_claims"])
+    # test_claims = load_jsonl(scifact_params["test_claims"])
     logging.info(
-        f"Loaded {len(train_claims)} train claims, {len(val_claims)} val claims, {len(test_claims)} test claims"
+        f"Loaded {len(train_claims)} train claims and {len(val_claims)} val claims"
     )
 
     # Extract and preprocess each claim's ICO prompt from the PICO Extraction
     # predictions and remove claims with malformed ICO predictions
     logging.info(
-        "Extracting ICO tokens from the SciFact claim ICO predictions and dropping claims with malformed ICO predictions"
+        "Extracting ICO tokens from the SciFact claim ICO predictions "
+        "and dropping claims with malformed ICO predictions"
     )
     train_claims = preprocess_claim_predictions_for_pipeline(train_claims)
     val_claims = preprocess_claim_predictions_for_pipeline(val_claims)
-    test_claims = preprocess_claim_predictions_for_pipeline(test_claims)
+    # test_claims = preprocess_claim_predictions_for_pipeline(test_claims)
     logging.info(
-        f"After preprocessing there are {len(train_claims)} train claims, {len(val_claims)} val claims, {len(test_claims)} test claims"
+        f"After preprocessing there are {len(train_claims)} train claims "
+        f"and {len(val_claims)} val claims"
     )
 
     # Create a SciFactAnnotation for every claim - evidence document pair
@@ -1749,16 +1753,16 @@ def load_scifact_data(
     val = create_scifact_annotations(
         val_claims, corpus, tokenizer, class_to_label, neutral_class
     )
-    test = create_scifact_annotations(
-        test_claims, corpus, tokenizer, class_to_label, neutral_class
-    )
+    # test = create_scifact_annotations(
+    #     test_claims, corpus, tokenizer, class_to_label, neutral_class
+    # )
 
     # Save to file
     logging.info(
-        f"Saving {len(train)} training instances, {len(val)} validation instances, {len(test)} test instances"
+        f"Saving {len(train)} training instances and {len(val)} validation instances"
     )
-    torch.save([train, val, test], data_save_file)
-    return train, val, test
+    torch.save([train, val], data_save_file)
+    return train, val
 
 
 def main():
@@ -1845,12 +1849,12 @@ def main():
             evidence_class_to_rationale_class[ev_class]: idx
             for ev_class, idx in evidence_classes.items()
         }
-        scifact_train, scifact_val, scifact_test = load_scifact_data(
+        scifact_train, scifact_val = load_scifact_data(
             args.output_dir, params, tokenizer, rationale_classes
         )
         logging.info(
             f"SciFact: Loaded {len(scifact_train)} training instances, "
-            f"{len(scifact_val)} val instances, and {len(scifact_test)} testing instances."
+            f"{len(scifact_val)} val instances"
         )
 
     train, val, test = load_data(args.output_dir, params, tokenizer, evidence_classes)
@@ -1894,9 +1898,11 @@ def main():
         evidence_classifier = evidence_classifier.cpu()
 
         # TODO decode
-        for t, d in [("val", scifact_val), ("test", scifact_test)]:
-            logging.info(f"\n\n\n\n SciFact Conditioned scores {t}\n\n\n\n")
-            decode_scifact()
+        logging.info("\n\n\n\n SciFact Conditioned scores val\n\n\n\n")
+        decode_scifact()
+        # for t, d in [("val", scifact_val), ("test", scifact_test)]:
+        #     logging.info(f"\n\n\n\n SciFact Conditioned scores {t}\n\n\n\n")
+        #     decode_scifact()
 
     # Train on Evidence Inference
     evidence_identifier, evidence_identifier_training_results = train_module(
