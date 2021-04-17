@@ -624,7 +624,7 @@ def make_preds_epoch(
 # copied from https://docs.python.org/3/library/itertools.html#itertools-recipes
 def _grouper(iterable, n, fillvalue=None):
     "Collect data into fixed-length chunks or blocks"
-    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
+    # grouper("ABCDEFG", 3, "x") --> ABC DEF Gxx"
     args = [iter(iterable)] * n
     return itertools.zip_longest(*args, fillvalue=fillvalue)
 
@@ -1277,7 +1277,7 @@ def train_module(
     model_pars: dict,
     sep_token_id: int,
     sampler: Callable[
-        Union[[Annotation], [SciFactAnnotation]],
+        [Union[Annotation, SciFactAnnotation]],
         List[
             Tuple[
                 torch.IntTensor,
@@ -1287,7 +1287,7 @@ def train_module(
         ],
     ],
     val_sampler: Callable[
-        Union[[Annotation], [SciFactAnnotation]],
+        [Union[Annotation, SciFactAnnotation]],
         List[
             Tuple[
                 torch.IntTensor,
@@ -1457,7 +1457,7 @@ def train_module(
             classification_report(hard_train_truths, hard_train_preds, output_dict=True)
         )
         logging.info(
-            f'Epoch {epoch} sampled training loss {sampled_epoch_train_loss}, acc {results["sampled_epoch_train_acc"][-1]}'
+            f"Epoch {epoch} sampled training loss {sampled_epoch_train_loss}, acc {results['sampled_epoch_train_acc'][-1]}"
         )
 
         with torch.no_grad():
@@ -1504,7 +1504,7 @@ def train_module(
                 )
             )
             logging.info(
-                f'Epoch {epoch} full val loss {epoch_val_loss}, accuracy: {results["full_epoch_val_acc"][-1]}, f1: {results["full_epoch_val_f1"][-1]}'
+                f"Epoch {epoch} full val loss {epoch_val_loss}, accuracy: {results['full_epoch_val_acc'][-1]}, f1: {results['full_epoch_val_f1'][-1]}"
             )
 
             full_val_f1 = results["full_epoch_val_f1"][-1]["macro avg"]["f1-score"]
@@ -1514,7 +1514,7 @@ def train_module(
                 logging.debug(
                     f"Epoch {epoch} new best model with full val f1 {full_val_f1}"
                 )
-                # logging.debug(f'Epoch {epoch} new best model with sampled val loss {sampled_epoch_val_loss}')
+                # logging.debug(f"Epoch {epoch} new best model with sampled val loss {sampled_epoch_val_loss}")
                 best_model_state_dict = OrderedDict(
                     {k: v.cpu() for k, v in model.state_dict().items()}
                 )
@@ -1576,7 +1576,7 @@ def load_data(save_dir: str, params: dict, tokenizer, evidence_classes: Dict[str
         articles = preprocessor.read_in_text_articles(
             article_ids, abstracts=use_abstracts
         )
-        # tokenizer = BertTokenizer.from_pretrained(params['bert_vocab'])
+        # tokenizer = BertTokenizer.from_pretrained(params["bert_vocab"])
         logging.info(f"Converting {len(articles)} articles for BERT")
         bert_articles = dict(
             map(
