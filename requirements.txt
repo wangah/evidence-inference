@@ -9,7 +9,5 @@ pandas
 pattern
 scikit-learn
 scipy
-sklearn
 spacy
-torch
 transformers
