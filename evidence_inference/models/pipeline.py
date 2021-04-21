@@ -54,7 +54,7 @@ from evidence_inference.preprocess.representations import (
 
 
 logging.basicConfig(
-    level=logging.DEBUG, format="%(relativeCreated)6d %(threadName)s %(message)s"
+    level=logging.DEBUG, format="%(asctime)s %(threadName)s %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -715,8 +715,8 @@ def decoding_instances(
             (id_tokens, id_ico, id_kls),
             (cls_tokens, cls_ico, cls_kls),
         ) in enumerate(zip(id_data, class_data)):
-            assert torch.all(id_tokens == cls_tokens)
-            assert all(torch.all(x == y) for (x, y) in zip(id_ico, cls_ico))
+            # assert torch.all(id_tokens == cls_tokens)
+            # assert all(torch.all(x == y) for (x, y) in zip(id_ico, cls_ico))
             instances.append(
                 DecodeInstance(
                     docid=ann.doc.docid,
@@ -1371,6 +1371,7 @@ def train_module(
         "full_epoch_val_f1": [],
         "full_epoch_val_acc": [],
     }
+
     # allow restoring an existing training run
     start_epoch = 0
     best_epoch = -1
@@ -1391,6 +1392,8 @@ def train_module(
             {k: v.cpu() for k, v in model.state_dict().items()}
         )
         logging.info(f"Restored training from epoch {start_epoch}")
+
+    # train
     logging.info(
         f"Training evidence model from epoch {start_epoch} until epoch {epochs}"
     )
@@ -1398,70 +1401,110 @@ def train_module(
     sep = torch.tensor(sep_token_id, dtype=torch.int).unsqueeze(0)
     # import ipdb; ipdb.set_trace()
     for epoch in range(start_epoch, epochs):
+        # get newly sampled data for this epoch
+        logging.info("Sampling epoch training data...")
         epoch_train_data = list(
             itertools.chain.from_iterable(sampler(t) for t in train)
         )
         assert len(epoch_train_data) > 0
         train_classes = Counter(x[-1] for x in epoch_train_data)
         random.shuffle(epoch_train_data)
-        epoch_val_data = list(itertools.chain.from_iterable(sampler(v) for v in val))
-        assert len(epoch_val_data) > 0
-        val_classes = Counter(x[-1] for x in epoch_val_data)
-        random.shuffle(epoch_val_data)
+        logging.info(
+            f"Sampled {len(epoch_train_data)} training examples for this epoch"
+        )
+        logging.info(f"Training classes distribution: {train_classes}")
+
+        n_batches = len(epoch_train_data) // batch_size
+        logging.info(
+            f"Training with {n_batches} mini-batches of batch size {batch_size}"
+        )
+
+        # train iterations
         sampled_epoch_train_loss = 0
+        # hard_train_preds = []
+        # hard_train_truths = []
         model.train()
-        logging.info(
-            f"Training with {len(epoch_train_data) // batch_size} batches with {len(epoch_train_data)} examples"
-        )
-        logging.info(
-            f"Training classes distribution: {train_classes}, valing class distribution: {val_classes}"
-        )
-        hard_train_preds = []
-        hard_train_truths = []
         optimizer.zero_grad()
+        batch_iter = 0
         for batch_start in range(0, len(epoch_train_data), batch_size):
+            # logging.info("####################################################")
+            # logging.info(f"Batch iter: {batch_iter}")
             model.train()
-            batch_elements = epoch_train_data[
-                batch_start : min(batch_start + batch_size, len(epoch_train_data))
-            ]
+
+            # inputs
             # we sample every time to thereoretically get a better representation of instances over the corpus.
             # this might just take more time than doing so in advance.
+            batch_end = min(batch_start + batch_size, len(epoch_train_data))
+            batch_elements = epoch_train_data[batch_start:batch_end]
             sentences, queries, targets = zip(*filter(lambda x: x, batch_elements))
-            hard_train_truths.extend(targets)
+
+            # hard_train_truths.extend(targets)
+
             # sentences = [s.to(device=device) for s in sentences]
             queries = [
                 torch.cat([i, sep, c, sep, o]).to(dtype=torch.long)
                 for (i, c, o) in queries
             ]
+
+            # forward
             preds = model(queries, sentences)
-            hard_train_preds.extend(
-                [x.cpu().item() for x in torch.argmax(preds, dim=-1)]
-            )
+            # hard_train_preds.extend(
+            #     [x.cpu().item() for x in torch.argmax(preds, dim=-1)]
+            # )
+            # logging.info(f"Pred shape {preds.shape}")
+
+            # backward
             targets = torch.tensor(targets, dtype=torch.long, device=device)
+            # logging.info(f"Targets: {targets}")
             loss = criterion(preds, targets.to(device=preds.device)).sum()
             sampled_epoch_train_loss += loss.item()
+            # logging.info(f"Loss: {loss.item():.3f}")
             loss = loss / len(preds)
             loss.backward()
+
+            # optimize
             if max_grad_norm:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
             optimizer.step()
             if scheduler:
                 scheduler.step()
             optimizer.zero_grad()
+
+            # print statistics
+            if batch_iter % 100 == 99:
+                running_loss = sampled_epoch_train_loss / batch_iter
+                logging.info(
+                    f"Epoch: {epoch}, Iter: {batch_iter}/{n_batches}, Loss: {running_loss:.3f}"
+                )
+            batch_iter += 1
+
+        # metrics
+        logging.info("Calculating metrics on the training data...")
         sampled_epoch_train_loss /= len(epoch_train_data)
         results["sampled_epoch_train_losses"].append(sampled_epoch_train_loss)
-        results["sampled_epoch_train_acc"].append(
-            accuracy_score(hard_train_truths, hard_train_preds)
-        )
-        results["sampled_epoch_train_f1"].append(
-            classification_report(hard_train_truths, hard_train_preds, output_dict=True)
-        )
-        logging.info(
-            f"Epoch {epoch} sampled training loss {sampled_epoch_train_loss}, acc {results['sampled_epoch_train_acc'][-1]}"
-        )
+        # results["sampled_epoch_train_acc"].append(
+        #     accuracy_score(hard_train_truths, hard_train_preds)
+        # )
+        # results["sampled_epoch_train_f1"].append(
+        #     classification_report(hard_train_truths, hard_train_preds, output_dict=True)
+        # )
+        # logging.info(
+        #     f"Epoch {epoch} sampled training loss {sampled_epoch_train_loss}, acc {results['sampled_epoch_train_acc'][-1]}"
+        # )
 
         with torch.no_grad():
             model.eval()
+
+            # evaluate over sampled validation data
+            logging.info("Sampling validation data for evaluation...")
+            epoch_val_data = list(
+                itertools.chain.from_iterable(sampler(v) for v in val)
+            )
+            assert len(epoch_val_data) > 0
+            val_classes = Counter(x[-1] for x in epoch_val_data)
+            random.shuffle(epoch_val_data)
+            logging.info(f"Sampled {len(epoch_val_data)} val examples for evaluation")
+            logging.info(f"Sample val class distribution: {val_classes}")
             (
                 sampled_epoch_val_loss,
                 _,
@@ -1470,6 +1513,8 @@ def train_module(
             ) = make_preds_epoch(
                 model, epoch_val_data, batch_size, sep_token_id, device, criterion
             )
+
+            logging.info("Calculating metrics on the sampled validation data...")
             sampled_epoch_val_acc = accuracy_score(
                 sampled_epoch_val_truth, sampled_epoch_val_hard_pred
             )
@@ -1482,10 +1527,13 @@ def train_module(
             logging.info(
                 f"Epoch {epoch} sampled val loss {sampled_epoch_val_loss}, acc {sampled_epoch_val_acc}, f1: {sampled_epoch_val_f1}"
             )
+
             # evaluate over *all* of the validation data
+            logging.info("Getting all the validation data for evaluation...")
             all_val_data = list(
                 itertools.chain.from_iterable(val_sampler(v) for v in val)
             )
+            logging.info(f"Collected {len(all_val_data)} instances for evaluation")
             (
                 epoch_val_loss,
                 epoch_val_soft_pred,
@@ -1907,6 +1955,7 @@ def main():
     # Train on Evidence Inference
     evidence_identifier, evidence_identifier_training_results = train_module(
         evidence_identifier.cuda(),
+        # evidence_identifier.cpu(),
         args.output_dir,
         "evidence_identifier",
         train,
@@ -1921,6 +1970,7 @@ def main():
 
     evidence_classifier, evidence_classifier_training_results = train_module(
         evidence_classifier.cuda(),
+        # evidence_classifier.cpu(),
         args.output_dir,
         "evidence_classifier",
         train,

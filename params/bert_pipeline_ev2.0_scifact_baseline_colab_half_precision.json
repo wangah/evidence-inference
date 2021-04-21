@@ -24,6 +24,10 @@
         "patience": 10,
         "max_grad_norm": 1.0,
         "lr": 2e-5,
-        "classes": ["significantly decreased", "no significant difference", "significantly increased"]
+        "classes": [
+            "significantly decreased",
+            "no significant difference",
+            "significantly increased"
+        ]
     }
 }

@@ -10,7 +10,7 @@
     "pretrain_on_scifact": false,
     "evidence_identifier": {
         "use_half_precision": 0,
-        "batch_size": 10,
+        "batch_size": 2,
         "epochs": 10,
         "patience": 10,
         "max_grad_norm": 1.0,
@@ -19,7 +19,7 @@
     },
     "evidence_classifier": {
         "use_half_precision": 0,
-        "batch_size": 10,
+        "batch_size": 2,
         "epochs": 10,
         "patience": 10,
         "max_grad_norm": 1.0,

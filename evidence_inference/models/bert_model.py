@@ -12,20 +12,22 @@ import json
 import torch
 import torch.nn as nn
 
-# from transformers import BertForSequenceClassification, BertTokenizer, PretrainedConfig
+from transformers import BertForSequenceClassification, BertTokenizer, PretrainedConfig
+
 # from transformers import RobertaForSequenceClassification, RobertaTokenizer, PretrainedConfig
-from transformers import (
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    PretrainedConfig,
-)
+# from transformers import (
+#     AutoModelForSequenceClassification,
+#     AutoTokenizer,
+#     PretrainedConfig,
+# )
 
 from evidence_inference.models.utils import PaddedSequence
 
 
 def initialize_models(params: dict, unk_token="<unk>"):
     max_length = params["max_length"]
-    tokenizer = AutoTokenizer.from_pretrained(params["bert_vocab"])
+    # tokenizer = AutoTokenizer.from_pretrained(params["bert_vocab"])
+    tokenizer = BertTokenizer.from_pretrained(params["bert_vocab"])
     pad_token_id = tokenizer.pad_token_id
     cls_token_id = tokenizer.cls_token_id
     sep_token_id = tokenizer.sep_token_id
@@ -122,9 +124,9 @@ class BertClassifier(nn.Module):
         if bert_dir is None:
             assert config is not None
             assert config.num_labels == num_labels
-            bert = AutoModelForSequenceClassification.from_config(config)
+            bert = BertForSequenceClassification.from_config(config)
         else:
-            bert = AutoModelForSequenceClassification.from_pretrained(
+            bert = BertForSequenceClassification.from_pretrained(
                 bert_dir, num_labels=num_labels
             )
         if use_half_precision:
@@ -149,6 +151,7 @@ class BertClassifier(nn.Module):
         sep_token = torch.tensor(
             [self.sep_token_id]
         )  # .to(device=document_batch[0].device)
+
         input_tensors = []
         position_ids = []
         for q, d in zip(query, document_batch):
@@ -159,6 +162,7 @@ class BertClassifier(nn.Module):
             )
             position_ids.append(torch.arange(0, input_tensors[-1].size().numel()))
             # position_ids.append(torch.tensor(list(range(0, len(q) + 1)) + list(range(0, len(d) + 1))))
+
         bert_input = PaddedSequence.autopad(
             input_tensors,
             batch_first=True,
@@ -168,12 +172,19 @@ class BertClassifier(nn.Module):
         positions = PaddedSequence.autopad(
             position_ids, batch_first=True, padding_value=0, device=target_device
         )
-        (classes,) = self.bert(
+        # print(f"Bert input shape: {bert_input.data.shape}")
+        # print(f"Positions shape: {positions.data.shape}")
+
+        # get output as a transformers.modeling_outputs.SequenceClassifierOutput
+        out = self.bert(
             bert_input.data,
             attention_mask=bert_input.mask(
                 on=1.0, off=0.0, dtype=torch.float, device=target_device
             ),
             position_ids=positions.data,
         )
-        assert torch.all(classes == classes)  # for nans
-        return classes
+
+        # print(f"Logits: {out.logits}")
+        assert not torch.any(torch.isnan(out.logits))
+        # assert torch.all(classes == classes)  # for nans
+        return out.logits
