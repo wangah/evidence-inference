@@ -185,6 +185,6 @@ class BertClassifier(nn.Module):
         )
 
         # print(f"Logits: {out.logits}")
-        assert not torch.any(torch.isnan(out.logits))
+        # assert not torch.any(torch.isnan(out.logits))
         # assert torch.all(classes == classes)  # for nans
         return out.logits

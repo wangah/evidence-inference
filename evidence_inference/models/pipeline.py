@@ -1395,7 +1395,7 @@ def train_module(
 
     # train
     logging.info(
-        f"Training evidence model from epoch {start_epoch} until epoch {epochs}"
+        f"Training {model_name} from epoch {start_epoch} until epoch {epochs}"
     )
     optimizer.zero_grad()
     sep = torch.tensor(sep_token_id, dtype=torch.int).unsqueeze(0)
@@ -1452,6 +1452,8 @@ def train_module(
             #     [x.cpu().item() for x in torch.argmax(preds, dim=-1)]
             # )
             # logging.info(f"Pred shape {preds.shape}")
+            if torch.any(torch.isnan(preds)):
+                logging.info(f"Pred contains NaN: {preds}")
 
             # backward
             targets = torch.tensor(targets, dtype=torch.long, device=device)
@@ -1471,7 +1473,7 @@ def train_module(
             optimizer.zero_grad()
 
             # print statistics
-            if batch_iter % 100 == 99:
+            if batch_iter % 200 == 199:
                 running_loss = sampled_epoch_train_loss / batch_iter
                 logging.info(
                     f"Epoch: {epoch}, Iter: {batch_iter}/{n_batches}, Loss: {running_loss:.3f}"
