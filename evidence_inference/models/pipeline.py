@@ -173,7 +173,13 @@ def get_scifact_identifier_sampler(
         ]
     ],
 ]:
+    # TODO should NOT_ENOUGH_INFO annotations be sampled from?
+    # If yes should we always return 1 sample or return a sample x% of the time?
+    nei_samples = params["scifact"]["rationale_identifier"][
+        "samples_per_nei_annotation"
+    ]
     ratio = params["scifact"]["rationale_identifier"]["sampling_ratio"]
+    neutral_class = params["scifact"]["neutral_class"]
 
     # returns sentence text, ico, classification
     def scifact_identifier_sampler(
@@ -185,6 +191,20 @@ def get_scifact_identifier_sampler(
             int,
         ]
     ]:
+        # NOT_ENOUGH_INFO
+        if s_ann.rationale_class == neutral_class:
+            random_encoded_sentences = random.sample(
+                s_ann.encoded_sentences, k=nei_samples
+            )
+            neg_samples = []
+            for token_ids in random_encoded_sentences:
+                i = torch.IntTensor(s_ann.i)
+                c = torch.IntTensor(s_ann.c)
+                o = torch.IntTensor(s_ann.o)
+                neg_samples.append((token_ids, (i, c, o), 0))
+            return neg_samples
+
+        # CONTRADICT / SUPPORT
         pos = []
         neg = []
         for sentence_idx, token_ids in enumerate(s_ann.encoded_sentences):
@@ -343,6 +363,8 @@ def get_scifact_classifier_oracle_sampler(
         ]
     ],
 ]:
+    neutral_class = params["scifact"]["neutral_class"]
+
     def scifact_classifier_oracle_sampler(
         s_ann: SciFactAnnotation,
     ) -> List[
@@ -352,13 +374,24 @@ def get_scifact_classifier_oracle_sampler(
             int,
         ]
     ]:
+        # NOT_ENOUGH_INFO
+        if s_ann.rationale_class == neutral_class:
+            random_encoded_sentence = random.choice(s_ann.encoded_sentences)
+            i = torch.IntTensor(s_ann.i)
+            c = torch.IntTensor(s_ann.c)
+            o = torch.IntTensor(s_ann.o)
+            return [
+                (random_encoded_sentence, (i, c, o), s_ann.rationale_id)
+            ]
+
+        # CONTRADICT / SUPPORT
         pos = []
         for sentence_idx, token_ids in enumerate(s_ann.encoded_sentences):
             i = torch.IntTensor(s_ann.i)
             c = torch.IntTensor(s_ann.c)
             o = torch.IntTensor(s_ann.o)
             if sentence_idx in s_ann.rationale_sentences:
-                pos.append((token_ids, (i, c, o), s_ann.rationale_class))
+                pos.append((token_ids, (i, c, o), s_ann.rationale_id))
 
         if len(pos) == 0:
             return pos
@@ -445,6 +478,11 @@ def get_scifact_classifier_sampler(
         ]
     ],
 ]:
+    nei_samples = params["scifact"]["rationale_classifier"][
+        "samples_per_nei_annotation"
+    ]
+    neutral_class = params["scifact"]["neutral_class"]
+
     def classification_sampler(
         s_ann: SciFactAnnotation,
     ) -> List[
@@ -454,13 +492,27 @@ def get_scifact_classifier_sampler(
             int,
         ]
     ]:
+        # NOT_ENOUGH_INFO
+        if s_ann.rationale_class == neutral_class:
+            random_encoded_sentences = random.sample(
+                s_ann.encoded_sentences, k=nei_samples
+            )
+            ret = []
+            for token_ids in random_encoded_sentences:
+                i = torch.IntTensor(s_ann.i)
+                c = torch.IntTensor(s_ann.c)
+                o = torch.IntTensor(s_ann.o)
+                ret.append((token_ids, (i, c, o), s_ann.rationale_id))
+            return ret
+
+        # CONTRADICT / SUPPORT
         ret = []
-        for sentence_idx, tokens in enumerate(s_ann.encoded_sentences):
+        for sentence_idx, token_ids in enumerate(s_ann.encoded_sentences):
             i = torch.IntTensor(s_ann.i)
             c = torch.IntTensor(s_ann.c)
             o = torch.IntTensor(s_ann.o)
             if sentence_idx in s_ann.rationale_sentences:
-                ret.append((tokens, (i, c, o), s_ann.rationale_class))
+                ret.append((token_ids, (i, c, o), s_ann.rationale_id))
         random.shuffle(ret)
         return ret
 
@@ -1419,6 +1471,8 @@ def train_module(
         logger.info(
             f"Training with {n_batches} mini-batches of batch size {batch_size}"
         )
+        print_freq_per_epoch = 5
+        print_every_n_iters = n_batches // print_freq_per_epoch
 
         # train iterations
         sampled_epoch_train_loss = 0
@@ -1465,7 +1519,7 @@ def train_module(
             optimizer.zero_grad()
 
             # print statistics
-            if batch_iter % 200 == 199:
+            if batch_iter % (print_every_n_iters - 1) == 0:
                 running_loss = sampled_epoch_train_loss / batch_iter
                 logger.info(
                     f"Epoch: {epoch}, Iter: {batch_iter + 1}/{n_batches}, Loss: {running_loss:.3f}"
@@ -1586,7 +1640,9 @@ def train_module(
     return model, results
 
 
-def load_data(save_dir: str, params: dict, tokenizer, evidence_classes: Dict[str, int]):
+def load_data(
+    save_dir: str, params: dict, tokenizer, evidence_class_to_id: Dict[str, int]
+):
     data_file = os.path.join(save_dir, "datasets.pkl")
     articles_file = os.path.join(save_dir, "bert_articles.pkl")
     use_abstracts = bool(params.get("use_abstracts", False))
@@ -1660,7 +1716,7 @@ def load_data(save_dir: str, params: dict, tokenizer, evidence_classes: Dict[str
         (c,) = anns["Comparator"].unique()
         (o,) = anns["Outcome"].unique()
         spans = anns[[EVIDENCE_START, EVIDENCE_END]]
-        label = evidence_classes[stats.mode(anns[LABEL])[0][0]]
+        label = evidence_class_to_id[stats.mode(anns[LABEL])[0][0]]
         doc = bert_articles[docid]
         sentences = list(doc.sentences)
         evidence_texts = anns[EVIDENCE_COL_NAME]
@@ -1745,7 +1801,7 @@ def load_data(save_dir: str, params: dict, tokenizer, evidence_classes: Dict[str
 
 
 def load_scifact_data(
-    save_dir: str, params: dict, tokenizer, class_to_label: Dict[str, int]
+    save_dir: str, params: dict, tokenizer, rationale_class_to_id: Dict[str, int]
 ) -> Tuple[List[SciFactAnnotation], List[SciFactAnnotation], List[SciFactAnnotation]]:
     """Load the SciFact Dataset for the pipeline model.
 
@@ -1753,7 +1809,7 @@ def load_scifact_data(
     will be preprocessed based on the completeness of the claim ICO element
     predictions.
     """
-    # TODO Create separate train/val/test splits from original train + val splits
+    # TODO Consider creating separate train/val/test splits from original train + val splits
 
     # Define the save path for the SciFact Dataset and extract if the preprocessed
     # data already exists.
@@ -1768,7 +1824,6 @@ def load_scifact_data(
     corpus = load_jsonl(scifact_params["corpus"])
     train_claims = load_jsonl(scifact_params["train_claims"])
     val_claims = load_jsonl(scifact_params["val_claims"])
-    # test_claims = load_jsonl(scifact_params["test_claims"])
     logger.info(
         f"Loaded {len(train_claims)} train claims and {len(val_claims)} val claims"
     )
@@ -1781,7 +1836,6 @@ def load_scifact_data(
     )
     train_claims = preprocess_claim_predictions_for_pipeline(train_claims)
     val_claims = preprocess_claim_predictions_for_pipeline(val_claims)
-    # test_claims = preprocess_claim_predictions_for_pipeline(test_claims)
     logger.info(
         f"After preprocessing there are {len(train_claims)} train claims "
         f"and {len(val_claims)} val claims"
@@ -1791,14 +1845,17 @@ def load_scifact_data(
     logger.info("Creating SciFactAnnotations from claims")
     neutral_class = scifact_params["neutral_class"]
     train = create_scifact_annotations(
-        train_claims, corpus, tokenizer, class_to_label, neutral_class
+        train_claims, corpus, tokenizer, rationale_class_to_id, neutral_class
     )
     val = create_scifact_annotations(
-        val_claims, corpus, tokenizer, class_to_label, neutral_class
+        val_claims, corpus, tokenizer, rationale_class_to_id, neutral_class
     )
-    # test = create_scifact_annotations(
-    #     test_claims, corpus, tokenizer, class_to_label, neutral_class
-    # )
+
+    train_dist = Counter([s_ann.rationale_id for s_ann in train])
+    val_dist = Counter([s_ann.rationale_id for s_ann in val])
+    logger.info(f"SciFact label to id: {rationale_class_to_id}")
+    logger.info(f"Training classes distribution: {train_dist}")
+    logger.info(f"Validation classes distribution: {val_dist}")
 
     # Save to file
     logger.info(
@@ -1879,7 +1936,7 @@ def main():
         evidence_classifier,
         word_interner,
         de_interner,
-        evidence_classes,
+        evidence_class_to_id,
         tokenizer,
     ) = initialize_models(params, "[UNK]")
 
@@ -1896,19 +1953,21 @@ def main():
         evidence_class_to_rationale_class = params["scifact"][
             "evidence_class_to_rationale_class"
         ]
-        rationale_classes = {
+        rationale_class_to_id = {
             evidence_class_to_rationale_class[ev_class]: idx
-            for ev_class, idx in evidence_classes.items()
+            for ev_class, idx in evidence_class_to_id.items()
         }
         scifact_train, scifact_val = load_scifact_data(
-            args.output_dir, params, tokenizer, rationale_classes
+            args.output_dir, params, tokenizer, rationale_class_to_id
         )
         logger.info(
             f"SciFact: Loaded {len(scifact_train)} training instances, "
             f"{len(scifact_val)} val instances"
         )
 
-    train, val, test = load_data(args.output_dir, params, tokenizer, evidence_classes)
+    train, val, test = load_data(
+        args.output_dir, params, tokenizer, evidence_class_to_id
+    )
     assert len(test) > 0
     logger.info(
         f"Evidence Inference: Loaded {len(train)} training instances, "
@@ -2095,7 +2154,7 @@ def main():
                 oracle_tru,
                 oracle_hard_pred,
                 "Conditioned oracle scoring",
-                evidence_classes,
+                evidence_class_to_id,
             )
         oracle_evidence_classifier = oracle_evidence_classifier.cpu()
 
@@ -2134,7 +2193,7 @@ def main():
                 oracle_tru,
                 oracle_hard_pred,
                 "Unconditioned oracle scoring",
-                evidence_classes,
+                evidence_class_to_id,
             )
         unconditioned_oracle_evidence_classifier = (
             unconditioned_oracle_evidence_classifier.cpu()
@@ -2172,7 +2231,10 @@ def main():
                 criterion=None,
             )
             e2e_score(
-                ico_only_tru, ico_only_hard_pred, "ICO only scoring", evidence_classes
+                ico_only_tru,
+                ico_only_hard_pred,
+                "ICO only scoring",
+                evidence_class_to_id,
             )
         ico_only_evidence_classifier = ico_only_evidence_classifier.cpu()
 

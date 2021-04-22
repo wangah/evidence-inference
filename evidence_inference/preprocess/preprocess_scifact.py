@@ -22,7 +22,8 @@ class SciFactAnnotation:
     i: torch.IntTensor
     c: torch.IntTensor
     o: torch.IntTensor
-    rationale_class: int
+    rationale_class: str
+    rationale_id: int
 
 
 def load_jsonl(path):
@@ -144,7 +145,7 @@ def preprocess_claim_predictions_for_pipeline(claims):
 
 
 def create_scifact_annotations(
-    claims, corpus, tokenizer, class_to_label: Dict[str, int], neutral_class: str
+    claims, corpus, tokenizer, class_to_id: Dict[str, int], neutral_class: str
 ) -> List[SciFactAnnotation]:
     """Create a SciFactAnnotation for each claim - evidence/cited document pair."""
 
@@ -174,7 +175,7 @@ def create_scifact_annotations(
         if not evidence:
             cited_doc_id = c["cited_doc_ids"][0]
             abstract, encoded_abstract = get_abstract_and_encoding(cited_doc_id)
-            rationale_label = class_to_label[neutral_class]
+            rationale_id = class_to_id[neutral_class]
 
             s_ann = SciFactAnnotation(
                 claim_id=int(c["id"]),
@@ -185,7 +186,8 @@ def create_scifact_annotations(
                 i=intervention,
                 c=comparator,
                 o=outcome,
-                rationale_class=rationale_label,
+                rationale_class=neutral_class,
+                rationale_id=rationale_id,
             )
             annotations.append(s_ann)
 
@@ -195,7 +197,7 @@ def create_scifact_annotations(
                 abstract, encoded_abstract = get_abstract_and_encoding(doc_id)
 
                 rationale_class = doc_rationales[0]["label"]
-                rationale_label = class_to_label[rationale_class]
+                rationale_id = class_to_id[rationale_class]
 
                 # extract all rationale sentence indices from the document
                 rationale_sentences = []
@@ -211,7 +213,8 @@ def create_scifact_annotations(
                     i=intervention,
                     c=comparator,
                     o=outcome,
-                    rationale_class=rationale_label,
+                    rationale_class=rationale_class,
+                    rationale_id=rationale_id,
                 )
                 annotations.append(s_ann)
     return annotations

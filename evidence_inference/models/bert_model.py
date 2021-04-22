@@ -31,7 +31,7 @@ def initialize_models(params: dict, unk_token="<unk>"):
     pad_token_id = tokenizer.pad_token_id
     cls_token_id = tokenizer.cls_token_id
     sep_token_id = tokenizer.sep_token_id
-    evidence_classes = dict(
+    evidence_class_to_id = dict(
         (y, x) for (x, y) in enumerate(params["evidence_classifier"]["classes"])
     )
     if bool(params.get("random_init", 0)):
@@ -39,7 +39,7 @@ def initialize_models(params: dict, unk_token="<unk>"):
             cfg = inf.read()
             id_config = PretrainedConfig.from_dict(json.loads(cfg), num_labels=2)
             cls_config = PretrainedConfig.from_dict(
-                json.loads(cfg), num_labels=len(evidence_classes)
+                json.loads(cfg), num_labels=len(evidence_class_to_id)
             )
         use_half_precision = bool(
             params["evidence_identifier"].get("use_half_precision", 0)
@@ -62,7 +62,7 @@ def initialize_models(params: dict, unk_token="<unk>"):
             pad_token_id=pad_token_id,
             cls_token_id=cls_token_id,
             sep_token_id=sep_token_id,
-            num_labels=len(evidence_classes),
+            num_labels=len(evidence_class_to_id),
             max_length=max_length,
             use_half_precision=use_half_precision,
             config=cls_config,
@@ -89,19 +89,18 @@ def initialize_models(params: dict, unk_token="<unk>"):
             pad_token_id=pad_token_id,
             cls_token_id=cls_token_id,
             sep_token_id=sep_token_id,
-            num_labels=len(evidence_classes),
+            num_labels=len(evidence_class_to_id),
             max_length=max_length,
             use_half_precision=use_half_precision,
         )
     word_interner = tokenizer.get_vocab()
     de_interner = dict((x, y) for (y, x) in word_interner.items())
-    # de_interner = tokenizer.ids_to_tokens
     return (
         evidence_identifier,
         evidence_classifier,
         word_interner,
         de_interner,
-        evidence_classes,
+        evidence_class_to_id,
         tokenizer,
     )
 
