@@ -58,9 +58,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter(
-    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
@@ -1400,9 +1398,7 @@ def train_module(
         logger.info(f"Restored training from epoch {start_epoch}")
 
     # train
-    logger.info(
-        f"Training {model_name} from epoch {start_epoch} until epoch {epochs}"
-    )
+    logger.info(f"Training {model_name} from epoch {start_epoch} until epoch {epochs}")
     optimizer.zero_grad()
     sep = torch.tensor(sep_token_id, dtype=torch.int).unsqueeze(0)
     # import ipdb; ipdb.set_trace()
@@ -1415,9 +1411,7 @@ def train_module(
         assert len(epoch_train_data) > 0
         train_classes = Counter(x[-1] for x in epoch_train_data)
         random.shuffle(epoch_train_data)
-        logger.info(
-            f"Sampled {len(epoch_train_data)} training examples for this epoch"
-        )
+        logger.info(f"Sampled {len(epoch_train_data)} training examples for this epoch")
         logger.info(f"Training classes distribution: {train_classes}")
 
         n_batches = len(epoch_train_data) // batch_size
@@ -1930,7 +1924,7 @@ def main():
             model_name="rationale_identifier",
             train=scifact_train,
             val=scifact_val,
-            model_pars=params["rationale_identifier"],
+            model_pars=params["scifact"]["rationale_identifier"],
             sep_token_id=tokenizer.sep_token_id,
             sampler=get_scifact_identifier_sampler(params),
             val_sampler=scifact_identifier_everything_sampler,
