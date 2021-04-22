@@ -7,7 +7,7 @@
     "bert_dir": "allenai/scibert_scivocab_uncased",
     "max_length": 512,
     "use_abstracts": true,
-    "run_diagnostics_models": false,
+    "run_diagnostic_models": false,
     "pretrain_on_scifact": false,
     "evidence_identifier": {
         "use_half_precision": 0,
