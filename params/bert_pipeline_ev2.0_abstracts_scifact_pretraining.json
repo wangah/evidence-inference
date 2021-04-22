@@ -6,10 +6,11 @@
     "bert_vocab": "allenai/scibert_scivocab_uncased",
     "bert_dir": "allenai/scibert_scivocab_uncased",
     "max_length": 512,
+    "use_abstracts": true,
     "run_diagnostic_models": false,
     "pretrain_on_scifact": true,
     "evidence_identifier": {
-        "use_half_precision": 1,
+        "use_half_precision": 0,
         "batch_size": 10,
         "epochs": 10,
         "patience": 10,
@@ -18,7 +19,7 @@
         "sampling_ratio": 1.0
     },
     "evidence_classifier": {
-        "use_half_precision": 1,
+        "use_half_precision": 0,
         "batch_size": 10,
         "epochs": 10,
         "patience": 10,
@@ -36,7 +37,7 @@
         "val_claims": "outputs/scifact/claims_dev_pio_bert.jsonl",
         "test_claims": "outputs/scifact/claims_test_pio_bert.jsonl",
         "rationale_identifier": {
-            "use_half_precision": 1,
+            "use_half_precision": 0,
             "batch_size": 10,
             "epochs": 10,
             "patience": 10,
@@ -45,7 +46,7 @@
             "sampling_ratio": 1.0
         },
         "rationale_classifier": {
-            "use_half_precision": 1,
+            "use_half_precision": 0,
             "batch_size": 10,
             "epochs": 10,
             "patience": 10,
