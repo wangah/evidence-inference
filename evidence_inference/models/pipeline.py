@@ -1519,7 +1519,7 @@ def train_module(
             optimizer.zero_grad()
 
             # print statistics
-            if batch_iter % (print_every_n_iters - 1) == 0:
+            if batch_iter % print_every_n_iters == (print_every_n_iters - 1):
                 running_loss = sampled_epoch_train_loss / batch_iter
                 logger.info(
                     f"Epoch: {epoch}, Iter: {batch_iter + 1}/{n_batches}, Loss: {running_loss:.3f}"
