@@ -56,11 +56,12 @@ from evidence_inference.preprocess.representations import (
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
+logger.propagate = False
 
 
 # TODO it would be nice to refreeze this, but there's a poor interaction between
@@ -1861,6 +1862,7 @@ def main():
 
     run_id = datetime.now().strftime(r"%m%d_%H%M%S")
     logger_outpath = os.path.join(args.output_dir, f"{run_id}.log")
+
     file_handler = logging.FileHandler(logger_outpath)
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
