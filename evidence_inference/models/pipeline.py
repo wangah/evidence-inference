@@ -2,6 +2,7 @@ import argparse
 from collections import Counter, defaultdict, OrderedDict
 import copy
 from dataclasses import asdict, dataclass
+from datetime import datetime
 import itertools
 import json
 import logging
@@ -53,10 +54,15 @@ from evidence_inference.preprocess.representations import (
 )
 
 
-logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s %(threadName)s %(message)s"
-)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 
 # TODO it would be nice to refreeze this, but there's a poor interaction between
@@ -737,7 +743,7 @@ def e2e_score(tru, pred, name, evidence_classes):
         tru, pred, output_dict=False, digits=4, target_names=evidence_classes
     )
     conf_matrix = confusion_matrix(tru, pred, normalize="true")
-    logging.info(
+    logger.info(
         f"{name} classification accuracy {acc},\nf1:\n{f1}\nconfusion matrix:\n{conf_matrix}\n"
     )
 
@@ -788,35 +794,35 @@ def decode(
     unconditioned_identifier_file = os.path.join(
         save_dir, f"{data_name}_unconditioned_identifier_output.pkl"
     )
-    logging.info(f"Decoding {len(data)} documents from {data_name}")
+    logger.info(f"Decoding {len(data)} documents from {data_name}")
     batch_size = model_pars["evidence_identifier"]["batch_size"]
     evidence_classes = model_pars["evidence_classifier"]["classes"]
     criterion = nn.CrossEntropyLoss(reduction="none")
 
     with torch.no_grad():
         if os.path.exists(instances_save_file):
-            logging.info(f"Loading instances from {instances_save_file}")
+            logger.info(f"Loading instances from {instances_save_file}")
             instances, oracle_instances = torch.load(instances_save_file)
         else:
-            logging.info(f"Generating and saving instances to {instances_save_file}")
+            logger.info(f"Generating and saving instances to {instances_save_file}")
             oracle_instances = oracle_decoding_instances(data)
             instances = decoding_instances(
                 data, identifier_transform, classifier_transform
             )
             torch.save((instances, oracle_instances), instances_save_file)
-        logging.info(f"Have {len(instances)} instances in our data")
+        logger.info(f"Have {len(instances)} instances in our data")
         evidence_identifier.eval()
         evidence_classifier.eval()
         # import ipdb; ipdb.set_trace()
         if os.path.exists(identifier_save_file):
-            logging.info(
+            logger.info(
                 f"Loading evidence identification predictions on {data_name} from {identifier_save_file}"
             )
             id_loss, id_soft_pred, id_hard_pred, id_truth = torch.load(
                 identifier_save_file
             )
         else:
-            logging.info(
+            logger.info(
                 f"Making evidence identification predictions on {data_name} and saving to {identifier_save_file}"
             )
             decode_target = "identifier" if conditioned else "unconditioned_identifier"
@@ -833,14 +839,14 @@ def decode(
             )
 
         if os.path.exists(classifier_save_file):
-            logging.info(
+            logger.info(
                 f"Loading evidence classification predictions on {data_name} from {classifier_save_file}"
             )
             cls_loss, cls_soft_pred, cls_hard_pred, cls_truth = torch.load(
                 classifier_save_file
             )
         else:
-            logging.info(
+            logger.info(
                 f"Making evidence classification predictions on {data_name} and saving to {classifier_save_file}"
             )
             decode_target = "classifier" if conditioned else "unconditioned_classifier"
@@ -861,12 +867,12 @@ def decode(
             os.path.exists(unconditioned_identifier_file)
             and unconditioned_evidence_identifier is not None
         ):
-            logging.info("Loading unconditioned evidence identification data")
+            logger.info("Loading unconditioned evidence identification data")
             docid_to_evidence_snippets, unid_soft_pred, unid_hard_pred = torch.load(
                 unconditioned_identifier_file
             )
         elif unconditioned_evidence_identifier is not None:
-            logging.info("Computing unconditioned evidence identification data")
+            logger.info("Computing unconditioned evidence identification data")
             docid_to_evidence_snippets = locate_known_evidence_snippets(data)
             _, unid_soft_pred, unid_hard_pred, _ = make_preds_epoch(
                 unconditioned_evidence_identifier,
@@ -887,7 +893,7 @@ def decode(
             docid_to_evidence_snippets = locate_known_evidence_snippets(data)
             unid_soft_pred, unid_hard_pred = None, None
 
-        logging.info("Aggregating information for scoring")
+        logger.info("Aggregating information for scoring")
         # not all annotations have evidence due to lossy offset recovery
         annotations_with_evidence = set()
         annotations_without_evidence = set()
@@ -976,7 +982,7 @@ def decode(
 
         assert total_length == len(cls_hard_pred)
         assert total_length == len(id_hard_pred)
-        logging.info(
+        logger.info(
             f"Of {len(data)} annotations, {len(annotations_with_evidence)} have evidence spans, {len(annotations_without_evidence)} do not"
         )
 
@@ -1011,7 +1017,7 @@ def decode(
                 mrr = mrr / query_count
             else:
                 mrr = None
-            logging.info(
+            logger.info(
                 f"identification auc {id_auc}, top1 acc: {id_top1_acc}, everything acc: {id_all_acc}, mrr: {mrr}"
             )
 
@@ -1031,7 +1037,7 @@ def decode(
                     frac = tp / (tp + fp)
                     mistakes_str.append(f"cls {tru} evid accuracy {frac}")
                 mistakes_str = "  ".join(mistakes_str)
-                logging.info(
+                logger.info(
                     f"Evidence ID accuracy breakdown by classification types {mistakes_str}"
                 )
 
@@ -1130,7 +1136,7 @@ def decode(
 
         # what happens if we use an unconditioned identifier
         if unconditioned_evidence_identifier is not None:
-            logging.info(
+            logger.info(
                 "Unconditional identifier scores (note the classifier is conditional)"
             )
             ev_only_unid_soft_pred = list(
@@ -1335,7 +1341,7 @@ def train_module(
         the trained evidence identifier and a dictionary of intermediate results.
     """
 
-    logging.info(
+    logger.info(
         f"Beginning training {model_name} with {len(train)} annotations, {len(val)} for validation"
     )
     output_dir = os.path.join(save_dir, f"{model_name}")
@@ -1391,10 +1397,10 @@ def train_module(
         best_model_state_dict = OrderedDict(
             {k: v.cpu() for k, v in model.state_dict().items()}
         )
-        logging.info(f"Restored training from epoch {start_epoch}")
+        logger.info(f"Restored training from epoch {start_epoch}")
 
     # train
-    logging.info(
+    logger.info(
         f"Training {model_name} from epoch {start_epoch} until epoch {epochs}"
     )
     optimizer.zero_grad()
@@ -1402,33 +1408,31 @@ def train_module(
     # import ipdb; ipdb.set_trace()
     for epoch in range(start_epoch, epochs):
         # get newly sampled data for this epoch
-        logging.info("Sampling epoch training data...")
+        logger.info("Sampling epoch training data...")
         epoch_train_data = list(
             itertools.chain.from_iterable(sampler(t) for t in train)
         )
         assert len(epoch_train_data) > 0
         train_classes = Counter(x[-1] for x in epoch_train_data)
         random.shuffle(epoch_train_data)
-        logging.info(
+        logger.info(
             f"Sampled {len(epoch_train_data)} training examples for this epoch"
         )
-        logging.info(f"Training classes distribution: {train_classes}")
+        logger.info(f"Training classes distribution: {train_classes}")
 
         n_batches = len(epoch_train_data) // batch_size
-        logging.info(
+        logger.info(
             f"Training with {n_batches} mini-batches of batch size {batch_size}"
         )
 
         # train iterations
         sampled_epoch_train_loss = 0
-        # hard_train_preds = []
-        # hard_train_truths = []
+        hard_train_preds = []
+        hard_train_truths = []
         model.train()
         optimizer.zero_grad()
         batch_iter = 0
         for batch_start in range(0, len(epoch_train_data), batch_size):
-            # logging.info("####################################################")
-            # logging.info(f"Batch iter: {batch_iter}")
             model.train()
 
             # inputs
@@ -1437,10 +1441,8 @@ def train_module(
             batch_end = min(batch_start + batch_size, len(epoch_train_data))
             batch_elements = epoch_train_data[batch_start:batch_end]
             sentences, queries, targets = zip(*filter(lambda x: x, batch_elements))
+            hard_train_truths.extend(targets)
 
-            # hard_train_truths.extend(targets)
-
-            # sentences = [s.to(device=device) for s in sentences]
             queries = [
                 torch.cat([i, sep, c, sep, o]).to(dtype=torch.long)
                 for (i, c, o) in queries
@@ -1448,19 +1450,14 @@ def train_module(
 
             # forward
             preds = model(queries, sentences)
-            # hard_train_preds.extend(
-            #     [x.cpu().item() for x in torch.argmax(preds, dim=-1)]
-            # )
-            # logging.info(f"Pred shape {preds.shape}")
-            if torch.any(torch.isnan(preds)):
-                logging.info(f"Pred contains NaN: {preds}")
+            hard_train_preds.extend(
+                [x.cpu().item() for x in torch.argmax(preds, dim=-1)]
+            )
 
             # backward
             targets = torch.tensor(targets, dtype=torch.long, device=device)
-            # logging.info(f"Targets: {targets}")
             loss = criterion(preds, targets.to(device=preds.device)).sum()
             sampled_epoch_train_loss += loss.item()
-            # logging.info(f"Loss: {loss.item():.3f}")
             loss = loss / len(preds)
             loss.backward()
 
@@ -1475,38 +1472,38 @@ def train_module(
             # print statistics
             if batch_iter % 200 == 199:
                 running_loss = sampled_epoch_train_loss / batch_iter
-                logging.info(
-                    f"Epoch: {epoch}, Iter: {batch_iter}/{n_batches}, Loss: {running_loss:.3f}"
+                logger.info(
+                    f"Epoch: {epoch}, Iter: {batch_iter + 1}/{n_batches}, Loss: {running_loss:.3f}"
                 )
             batch_iter += 1
 
         # metrics
-        logging.info("Calculating metrics on the training data...")
+        logger.info("Calculating metrics on the training data...")
         sampled_epoch_train_loss /= len(epoch_train_data)
         results["sampled_epoch_train_losses"].append(sampled_epoch_train_loss)
-        # results["sampled_epoch_train_acc"].append(
-        #     accuracy_score(hard_train_truths, hard_train_preds)
-        # )
-        # results["sampled_epoch_train_f1"].append(
-        #     classification_report(hard_train_truths, hard_train_preds, output_dict=True)
-        # )
-        # logging.info(
-        #     f"Epoch {epoch} sampled training loss {sampled_epoch_train_loss}, acc {results['sampled_epoch_train_acc'][-1]}"
-        # )
+        results["sampled_epoch_train_acc"].append(
+            accuracy_score(hard_train_truths, hard_train_preds)
+        )
+        results["sampled_epoch_train_f1"].append(
+            classification_report(hard_train_truths, hard_train_preds, output_dict=True)
+        )
+        logger.info(
+            f"Epoch {epoch} sampled training loss {sampled_epoch_train_loss}, acc {results['sampled_epoch_train_acc'][-1]}"
+        )
 
         with torch.no_grad():
             model.eval()
 
             # evaluate over sampled validation data
-            logging.info("Sampling validation data for evaluation...")
+            logger.info("Sampling validation data for evaluation...")
             epoch_val_data = list(
                 itertools.chain.from_iterable(sampler(v) for v in val)
             )
             assert len(epoch_val_data) > 0
             val_classes = Counter(x[-1] for x in epoch_val_data)
             random.shuffle(epoch_val_data)
-            logging.info(f"Sampled {len(epoch_val_data)} val examples for evaluation")
-            logging.info(f"Sample val class distribution: {val_classes}")
+            logger.info(f"Sampled {len(epoch_val_data)} val examples for evaluation")
+            logger.info(f"Sample val class distribution: {val_classes}")
             (
                 sampled_epoch_val_loss,
                 _,
@@ -1516,7 +1513,7 @@ def train_module(
                 model, epoch_val_data, batch_size, sep_token_id, device, criterion
             )
 
-            logging.info("Calculating metrics on the sampled validation data...")
+            logger.info("Calculating metrics on the sampled validation data...")
             sampled_epoch_val_acc = accuracy_score(
                 sampled_epoch_val_truth, sampled_epoch_val_hard_pred
             )
@@ -1526,16 +1523,16 @@ def train_module(
             results["sampled_epoch_val_losses"].append(sampled_epoch_val_loss)
             results["sampled_epoch_val_acc"].append(sampled_epoch_val_acc)
             results["sampled_epoch_val_f1"].append(sampled_epoch_val_f1)
-            logging.info(
+            logger.info(
                 f"Epoch {epoch} sampled val loss {sampled_epoch_val_loss}, acc {sampled_epoch_val_acc}, f1: {sampled_epoch_val_f1}"
             )
 
             # evaluate over *all* of the validation data
-            logging.info("Getting all the validation data for evaluation...")
+            logger.info("Getting all the validation data for evaluation...")
             all_val_data = list(
                 itertools.chain.from_iterable(val_sampler(v) for v in val)
             )
-            logging.info(f"Collected {len(all_val_data)} instances for evaluation")
+            logger.info(f"Collected {len(all_val_data)} instances for evaluation")
             (
                 epoch_val_loss,
                 epoch_val_soft_pred,
@@ -1553,7 +1550,7 @@ def train_module(
                     epoch_val_truth, epoch_val_hard_pred, output_dict=True
                 )
             )
-            logging.info(
+            logger.info(
                 f"Epoch {epoch} full val loss {epoch_val_loss}, accuracy: {results['full_epoch_val_acc'][-1]}, f1: {results['full_epoch_val_f1'][-1]}"
             )
 
@@ -1561,10 +1558,11 @@ def train_module(
             # if epoch_val_loss < best_val_loss:
             # if sampled_epoch_val_loss < best_val_loss:
             if full_val_f1 > best_val_f1:
-                logging.debug(
+                logger.debug(
                     f"Epoch {epoch} new best model with full val f1 {full_val_f1}"
                 )
-                # logging.debug(f"Epoch {epoch} new best model with sampled val loss {sampled_epoch_val_loss}")
+                # logger.debug(f"Epoch {epoch} new best model with sampled val loss {sampled_epoch_val_loss}")
+
                 best_model_state_dict = OrderedDict(
                     {k: v.cpu() for k, v in model.state_dict().items()}
                 )
@@ -1598,11 +1596,11 @@ def load_data(save_dir: str, params: dict, tokenizer, evidence_classes: Dict[str
     articles_file = os.path.join(save_dir, "bert_articles.pkl")
     use_abstracts = bool(params.get("use_abstracts", False))
     if os.path.exists(data_file):
-        logging.info(f"Resurrecting train/val/test from {data_file}")
+        logger.info(f"Resurrecting train/val/test from {data_file}")
         # this is a hack to deal with a previous version of data loading
         train, val, test = torch.load(data_file)
         if len(test) == 0:
-            logging.info("Test was empty, using val")
+            logger.info("Test was empty, using val")
             test = val
         return (train, val, test)
     ei_annotations = preprocessor.read_annotations()
@@ -1610,24 +1608,24 @@ def load_data(save_dir: str, params: dict, tokenizer, evidence_classes: Dict[str
     if use_abstracts:
         ei_annotations = ei_annotations[ei_annotations["In Abstract"]]
     # TODO these column names should be factored out
-    logging.info("joining prompts/annotations")
+    logger.info("joining prompts/annotations")
     joined = ei_annotations.merge(
         ei_prompts, on=PROMPT_ID_COL_NAME, suffixes=("", "_y")
     )
 
     article_ids = set(joined[STUDY_ID_COL].unique())
     if os.path.exists(articles_file):
-        logging.info(
+        logger.info(
             f"Reading {len(article_ids)} computed articles from {articles_file}"
         )
         bert_articles = torch.load(articles_file)
     else:
-        logging.info(f"Reading {len(article_ids)} articles")
+        logger.info(f"Reading {len(article_ids)} articles")
         articles = preprocessor.read_in_text_articles(
             article_ids, abstracts=use_abstracts
         )
         # tokenizer = BertTokenizer.from_pretrained(params["bert_vocab"])
-        logging.info(f"Converting {len(articles)} articles for BERT")
+        logger.info(f"Converting {len(articles)} articles for BERT")
         bert_articles = dict(
             map(
                 lambda x: (
@@ -1651,7 +1649,7 @@ def load_data(save_dir: str, params: dict, tokenizer, evidence_classes: Dict[str
     # target_ids = set(train_ids | val_ids | test_ids)
     train, val, test, skipped = [], [], [], []
 
-    logging.info("Converting prompts")
+    logger.info("Converting prompts")
     prompt_ids = set(joined[PROMPT_ID_COL_NAME].unique())
     skipped_prompts = set()
 
@@ -1660,7 +1658,7 @@ def load_data(save_dir: str, params: dict, tokenizer, evidence_classes: Dict[str
         (docid,) = anns[STUDY_ID_COL].unique()
         docid = str(docid)
         if docid not in bert_articles:
-            logging.warn(f"Skipping prompt {prompt_id} for missing document {docid}")
+            logger.warn(f"Skipping prompt {prompt_id} for missing document {docid}")
             skipped_prompts.add(prompt_id)
             continue
         (i,) = anns["Intervention"].unique()
@@ -1741,9 +1739,9 @@ def load_data(save_dir: str, params: dict, tokenizer, evidence_classes: Dict[str
             test.append(ann)
         if docid not in all_ids:
             skipped.append(docid)
-    logging.info(f"Skipped {len(skipped_prompts)} prompts for missing documents")
-    logging.info(f"Skipped converting {len(skipped)} ids")
-    logging.info(
+    logger.info(f"Skipped {len(skipped_prompts)} prompts for missing documents")
+    logger.info(f"Skipped converting {len(skipped)} ids")
+    logger.info(
         f"Have {len(train)} training instances, {len(val)} validation instances, {len(test)} test instances"
     )
     torch.save([train, val, test], data_file)
@@ -1766,7 +1764,7 @@ def load_scifact_data(
     # data already exists.
     data_save_file = os.path.join(save_dir, "scifact_datasets.pkl")
     if os.path.exists(data_save_file):
-        logging.info(f"Resurrecting train/val from {data_save_file}")
+        logger.info(f"Resurrecting train/val from {data_save_file}")
         train, val = torch.load(data_save_file)
         return train, val
 
@@ -1776,26 +1774,26 @@ def load_scifact_data(
     train_claims = load_jsonl(scifact_params["train_claims"])
     val_claims = load_jsonl(scifact_params["val_claims"])
     # test_claims = load_jsonl(scifact_params["test_claims"])
-    logging.info(
+    logger.info(
         f"Loaded {len(train_claims)} train claims and {len(val_claims)} val claims"
     )
 
     # Extract and preprocess each claim's ICO prompt from the PICO Extraction
     # predictions and remove claims with malformed ICO predictions
-    logging.info(
+    logger.info(
         "Extracting ICO tokens from the SciFact claim ICO predictions "
         "and dropping claims with malformed ICO predictions"
     )
     train_claims = preprocess_claim_predictions_for_pipeline(train_claims)
     val_claims = preprocess_claim_predictions_for_pipeline(val_claims)
     # test_claims = preprocess_claim_predictions_for_pipeline(test_claims)
-    logging.info(
+    logger.info(
         f"After preprocessing there are {len(train_claims)} train claims "
         f"and {len(val_claims)} val claims"
     )
 
     # Create a SciFactAnnotation for every claim - evidence document pair
-    logging.info("Creating SciFactAnnotations from claims")
+    logger.info("Creating SciFactAnnotations from claims")
     neutral_class = scifact_params["neutral_class"]
     train = create_scifact_annotations(
         train_claims, corpus, tokenizer, class_to_label, neutral_class
@@ -1808,7 +1806,7 @@ def load_scifact_data(
     # )
 
     # Save to file
-    logging.info(
+    logger.info(
         f"Saving {len(train)} training instances and {len(val)} validation instances"
     )
     torch.save([train, val], data_save_file)
@@ -1839,13 +1837,13 @@ def main():
         "--output_dir",
         dest="output_dir",
         required=True,
-        help="Where shall we write intermediate models + final data to?",
+        help="Where shall we write logs, intermediate models, and final data to?",
     )
     parser.add_argument(
         "--params",
         dest="params",
         required=True,
-        help="JSoN file for loading arbitrary model parameters (e.g. optimizers, pre-saved files, etc.",
+        help="JSON file for loading arbitrary model parameters (e.g. optimizers, pre-saved files, etc.)",
     )
     parser.add_argument(
         "--data_only",
@@ -1856,11 +1854,25 @@ def main():
     )
     args = parser.parse_args()
 
-    # Load parameters
+    # Create the output directory for checkpoints and results
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir, exist_ok=True)
+        shutil.copyfile(
+            args.params, os.path.join(args.output_dir, os.path.basename(args.params))
+        )
+
+    # Load parameters and set up logging
     with open(args.params, "r") as fp:
-        logger.info(f"Loading model parameters from {args.params}")
         params = json.load(fp)
-        logger.info(f"Params: {json.dumps(params, indent=2, sort_keys=True)}")
+
+    run_id = datetime.now().strftime(r"%m%d_%H%M%S")
+    logger_outpath = os.path.join(args.output_dir, f"{run_id}.log")
+    file_handler = logging.FileHandler(logger_outpath)
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    logger.info(f"Loaded model parameters from {args.params}")
+    logger.info(f"Params: {json.dumps(params, indent=2, sort_keys=True)}")
 
     # Set random seed
     set_seed(params.get("seed", 0))
@@ -1883,13 +1895,6 @@ def main():
         unconditioned_evidence_identifier = copy.deepcopy(evidence_identifier)
         unconditioned_evidence_classifier = copy.deepcopy(evidence_classifier)
 
-    # Create the output directory for checkpoints and results
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir, exist_ok=True)
-        shutil.copyfile(
-            args.params, os.path.join(args.output_dir, os.path.basename(args.params))
-        )
-
     # Process data
     if params.get("pretrain_on_scifact", False):
         evidence_class_to_rationale_class = params["scifact"][
@@ -1902,14 +1907,14 @@ def main():
         scifact_train, scifact_val = load_scifact_data(
             args.output_dir, params, tokenizer, rationale_classes
         )
-        logging.info(
+        logger.info(
             f"SciFact: Loaded {len(scifact_train)} training instances, "
             f"{len(scifact_val)} val instances"
         )
 
     train, val, test = load_data(args.output_dir, params, tokenizer, evidence_classes)
     assert len(test) > 0
-    logging.info(
+    logger.info(
         f"Evidence Inference: Loaded {len(train)} training instances, "
         f"{len(val)} val instances, and {len(test)} testing instances"
     )
@@ -1948,10 +1953,10 @@ def main():
         evidence_classifier = evidence_classifier.cpu()
 
         # TODO decode
-        logging.info("\n\n\n\n SciFact Conditioned scores val\n\n\n\n")
+        logger.info("\n\n\n\n SciFact Conditioned scores val\n\n\n\n")
         decode_scifact()
         # for t, d in [("val", scifact_val), ("test", scifact_test)]:
-        #     logging.info(f"\n\n\n\n SciFact Conditioned scores {t}\n\n\n\n")
+        #     logger.info(f"\n\n\n\n SciFact Conditioned scores {t}\n\n\n\n")
         #     decode_scifact()
 
     # Train on Evidence Inference
@@ -1986,7 +1991,7 @@ def main():
     evidence_classifier = evidence_classifier.cpu()
 
     for t, d in [("val", val), ("test", test)]:
-        logging.info(f"\n\n\n\nConditioned scores {t}\n\n\n\n")
+        logger.info(f"\n\n\n\nConditioned scores {t}\n\n\n\n")
         decode(
             evidence_identifier.cuda(),
             evidence_classifier.cuda(),
@@ -2041,7 +2046,7 @@ def main():
         unconditioned_evidence_classifier = unconditioned_evidence_classifier.cpu()
 
     for t, d in [("val", val), ("test", test)]:
-        logging.info(f"\n\n\n\nUnconditioned scores {t}\n\n\n\n")
+        logger.info(f"\n\n\n\nUnconditioned scores {t}\n\n\n\n")
         decode(
             unconditioned_evidence_identifier.cuda(),
             unconditioned_evidence_classifier.cuda(),
@@ -2060,7 +2065,7 @@ def main():
     # evidence_classifier = evidence_classifier.cpu()
 
     if oracle_evidence_classifier is not None:
-        logging.info("Conditioned oracle evidence classifier")
+        logger.info("Conditioned oracle evidence classifier")
         oracle_sampler = get_classifier_oracle_sampler(params)
         (
             oracle_evidence_classifier,
@@ -2078,7 +2083,7 @@ def main():
             detokenizer=de_interner,
         )
         for n, t in [("val", val), ("test", test)]:
-            logging.info(f"Decoding on {n}")
+            logger.info(f"Decoding on {n}")
             _, _, oracle_hard_pred, oracle_tru = make_preds_epoch(
                 oracle_evidence_classifier.cuda(),
                 [
@@ -2099,7 +2104,7 @@ def main():
         oracle_evidence_classifier = oracle_evidence_classifier.cpu()
 
     if unconditioned_oracle_evidence_classifier is not None:
-        logging.info("Unconditioned oracle evidence classifier")
+        logger.info("Unconditioned oracle evidence classifier")
         oracle_sampler = get_classifier_oracle_sampler(params)
         (
             unconditioned_oracle_evidence_classifier,
@@ -2117,7 +2122,7 @@ def main():
             detokenizer=de_interner,
         )
         for n, t in [("val", val), ("test", test)]:
-            logging.info(f"Decoding on {n}")
+            logger.info(f"Decoding on {n}")
             _, _, oracle_hard_pred, oracle_tru = make_preds_epoch(
                 unconditioned_oracle_evidence_classifier.cuda(),
                 [
@@ -2140,7 +2145,7 @@ def main():
         )
 
     if ico_only_evidence_classifier is not None:
-        logging.info("ICO only evidence classifier")
+        logger.info("ICO only evidence classifier")
         oracle_sampler = get_classifier_oracle_sampler(params)
         (
             ico_only_evidence_classifier,
@@ -2158,7 +2163,7 @@ def main():
             detokenizer=de_interner,
         )
         for n, t in [("val", val), ("test", test)]:
-            logging.info(f"Decoding on {n}")
+            logger.info(f"Decoding on {n}")
             _, _, ico_only_hard_pred, ico_only_tru = make_preds_epoch(
                 ico_only_evidence_classifier.cuda(),
                 [
