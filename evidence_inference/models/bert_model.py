@@ -161,7 +161,6 @@ class BertClassifier(nn.Module):
                 torch.cat([cls_token, q, sep_token, d.to(dtype=q.dtype)])
             )
             position_ids.append(torch.arange(0, input_tensors[-1].size().numel()))
-            # position_ids.append(torch.tensor(list(range(0, len(q) + 1)) + list(range(0, len(d) + 1))))
 
         bert_input = PaddedSequence.autopad(
             input_tensors,
@@ -172,8 +171,6 @@ class BertClassifier(nn.Module):
         positions = PaddedSequence.autopad(
             position_ids, batch_first=True, padding_value=0, device=target_device
         )
-        # print(f"Bert input shape: {bert_input.data.shape}")
-        # print(f"Positions shape: {positions.data.shape}")
 
         # get output as a transformers.modeling_outputs.SequenceClassifierOutput
         out = self.bert(
@@ -184,7 +181,5 @@ class BertClassifier(nn.Module):
             position_ids=positions.data,
         )
 
-        # print(f"Logits: {out.logits}")
-        # assert not torch.any(torch.isnan(out.logits))
-        # assert torch.all(classes == classes)  # for nans
+        assert not torch.any(torch.isnan(out.logits))
         return out.logits
