@@ -380,9 +380,7 @@ def get_scifact_classifier_oracle_sampler(
             i = torch.IntTensor(s_ann.i)
             c = torch.IntTensor(s_ann.c)
             o = torch.IntTensor(s_ann.o)
-            return [
-                (random_encoded_sentence, (i, c, o), s_ann.rationale_id)
-            ]
+            return [(random_encoded_sentence, (i, c, o), s_ann.rationale_id)]
 
         # CONTRADICT / SUPPORT
         pos = []
@@ -1622,7 +1620,8 @@ def train_module(
                 epoch_data = {
                     "epoch": epoch,
                     "results": results,
-                    "best_val_loss": best_val_loss,
+                    "best_val_f1": best_val_f1,
+                    # "best_val_loss": best_val_loss,
                     "done": 0,
                 }
                 torch.save(epoch_data, epoch_save_file)
@@ -1941,7 +1940,9 @@ def main():
     ) = initialize_models(params, "[UNK]")
 
     # Initialize diagnostic models
-    if not params.get("scifact_only", False) and params.get("run_diagnostic_models", True):
+    if not params.get("scifact_only", False) and params.get(
+        "run_diagnostic_models", True
+    ):
         oracle_evidence_classifier = copy.deepcopy(evidence_classifier)
         ico_only_evidence_classifier = copy.deepcopy(evidence_classifier)
         unconditioned_oracle_evidence_classifier = copy.deepcopy(evidence_classifier)
