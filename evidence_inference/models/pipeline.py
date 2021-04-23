@@ -1941,7 +1941,7 @@ def main():
     ) = initialize_models(params, "[UNK]")
 
     # Initialize diagnostic models
-    if params.get("run_diagnostic_models", True):
+    if not params.get("scifact_only", False) and params.get("run_diagnostic_models", True):
         oracle_evidence_classifier = copy.deepcopy(evidence_classifier)
         ico_only_evidence_classifier = copy.deepcopy(evidence_classifier)
         unconditioned_oracle_evidence_classifier = copy.deepcopy(evidence_classifier)
@@ -1949,7 +1949,7 @@ def main():
         unconditioned_evidence_classifier = copy.deepcopy(evidence_classifier)
 
     # Process data
-    if params.get("pretrain_on_scifact", False):
+    if params.get("pretrain_on_scifact", False) or params.get("scifact_only", False):
         evidence_class_to_rationale_class = params["scifact"][
             "evidence_class_to_rationale_class"
         ]
@@ -1965,14 +1965,15 @@ def main():
             f"{len(scifact_val)} val instances"
         )
 
-    train, val, test = load_data(
-        args.output_dir, params, tokenizer, evidence_class_to_id
-    )
-    assert len(test) > 0
-    logger.info(
-        f"Evidence Inference: Loaded {len(train)} training instances, "
-        f"{len(val)} val instances, and {len(test)} testing instances"
-    )
+    if not params.get("scifact_only", False):
+        train, val, test = load_data(
+            args.output_dir, params, tokenizer, evidence_class_to_id
+        )
+        assert len(test) > 0
+        logger.info(
+            f"Evidence Inference: Loaded {len(train)} training instances, "
+            f"{len(val)} val instances, and {len(test)} testing instances"
+        )
 
     if args.data_only:
         sys.exit(0)
@@ -2013,6 +2014,9 @@ def main():
         # for t, d in [("val", scifact_val), ("test", scifact_test)]:
         #     logger.info(f"\n\n\n\n SciFact Conditioned scores {t}\n\n\n\n")
         #     decode_scifact()
+
+    if params.get("scifact_only", False):
+        sys.exit(0)
 
     # Train on Evidence Inference
     evidence_identifier, evidence_identifier_training_results = train_module(
